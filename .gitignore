@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Firebase ###
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+firebase-credentials*.json
+.env
