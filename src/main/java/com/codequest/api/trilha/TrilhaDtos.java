@@ -14,11 +14,13 @@ public final class TrilhaDtos {
                                 boolean concluida, List<PerguntaResponse> perguntas) {
     }
 
-    /** A alternativa correta nao e enviada ao cliente. */
     public record PerguntaResponse(String id, String enunciado, List<OpcaoResponse> opcoes) {
     }
 
-    public record OpcaoResponse(String id, String texto) {
+    public record OpcaoResponse(String id, String texto, boolean correta) {
+    }
+
+    public record ConclusaoRequest(java.util.Map<String, String> respostas) {
     }
 
     public record ConclusaoResponse(String licaoId, int xpGanho, long xpTotal, int nivelAtual) {

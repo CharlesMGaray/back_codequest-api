@@ -71,6 +71,11 @@ public class TrilhaService {
 
     /** Conclui a licao uma unica vez por usuario, somando o XP de forma atomica. */
     public ConclusaoResponse concluirLicao(String uid, String licaoId) {
+        return concluirLicao(uid, licaoId, null);
+    }
+
+    @SuppressWarnings("unchecked")
+    public ConclusaoResponse concluirLicao(String uid, String licaoId, TrilhaDtos.ConclusaoRequest request) {
         DocumentReference licaoRef = db.collection(LICOES).document(licaoId);
         DocumentReference usuarioRef = db.collection(UsuarioRepository.COLECAO).document(uid);
         DocumentReference conclusaoRef = concluidas(uid).document(licaoId);
@@ -88,6 +93,25 @@ public class TrilhaService {
             }
             if (conclusao.exists()) {
                 throw new ApiException(HttpStatus.CONFLICT, "Licao ja concluida.");
+            }
+
+            // Validar respostas se enviadas
+            if (request != null && request.respostas() != null && !request.respostas().isEmpty()) {
+                List<Map<String, Object>> perguntas = (List<Map<String, Object>>) licao.get("perguntas");
+                if (perguntas != null) {
+                    for (var p : perguntas) {
+                        String pId = String.valueOf(p.get("id"));
+                        String selectedOpId = request.respostas().get(pId);
+                        List<Map<String, Object>> opcoes = (List<Map<String, Object>>) p.get("opcoes");
+                        if (opcoes != null) {
+                            boolean acertou = opcoes.stream().anyMatch(o ->
+                                    String.valueOf(o.get("id")).equals(selectedOpId) && Boolean.TRUE.equals(o.get("correta")));
+                            if (!acertou) {
+                                throw new ApiException(HttpStatus.BAD_REQUEST, "Uma ou mais respostas estao incorretas.");
+                            }
+                        }
+                    }
+                }
             }
 
             int xpGanho = intOf(licao.getLong("xpBonus"));
@@ -116,7 +140,10 @@ public class TrilhaService {
                 .map(p -> {
                     List<Map<String, Object>> opcoes = (List<Map<String, Object>>) p.get("opcoes");
                     List<OpcaoResponse> opcoesDto = opcoes == null ? List.of() : opcoes.stream()
-                            .map(o -> new OpcaoResponse(String.valueOf(o.get("id")), (String) o.get("texto")))
+                            .map(o -> new OpcaoResponse(
+                                    String.valueOf(o.get("id")),
+                                    (String) o.get("texto"),
+                                    Boolean.TRUE.equals(o.get("correta"))))
                             .toList();
                     return new PerguntaResponse(String.valueOf(p.get("id")), (String) p.get("enunciado"), opcoesDto);
                 })

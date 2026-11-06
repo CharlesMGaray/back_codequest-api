@@ -1,11 +1,13 @@
 package com.codequest.api.trilha;
 
+import com.codequest.api.trilha.TrilhaDtos.ConclusaoRequest;
 import com.codequest.api.trilha.TrilhaDtos.ConclusaoResponse;
 import com.codequest.api.trilha.TrilhaDtos.TrilhaResponse;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,7 +29,10 @@ public class TrilhaController {
     }
 
     @PostMapping("/licoes/{licaoId}/concluir")
-    public ConclusaoResponse concluir(@AuthenticationPrincipal String uid, @PathVariable String licaoId) {
-        return trilhaService.concluirLicao(uid, licaoId);
+    public ConclusaoResponse concluir(
+            @AuthenticationPrincipal String uid,
+            @PathVariable String licaoId,
+            @RequestBody(required = false) ConclusaoRequest body) {
+        return trilhaService.concluirLicao(uid, licaoId, body);
     }
 }
