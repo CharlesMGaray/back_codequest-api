@@ -19,7 +19,12 @@ Variáveis de ambiente:
 | `FIREBASE_PROJECT_ID` | ID do projeto |
 | `FIREBASE_CREDENTIALS_PATH` | Caminho do JSON da service account (ou use `GOOGLE_APPLICATION_CREDENTIALS`) |
 | `FIREBASE_WEB_API_KEY` | Chave de API da Web (usada no login por e-mail/senha) |
-| `CODEQUEST_SEED_ENABLED` | `true` (padrão) cria trilhas/lições de exemplo se `trilhas` estiver vazia |
+| `CODEQUEST_SEED_ENABLED` | `true` (padrão) sincroniza o currículo inicial de trilhas e lições ao iniciar a API |
+
+O currículo inicial contém seis trilhas, cada uma com 10 a 15 questões de múltipla
+escolha. As trilhas e lições mantidas pelo seed são atualizadas ao iniciar a API,
+inclusive quando já existem dados no Firestore; o progresso dos usuários fica
+preservado. Defina `CODEQUEST_SEED_ENABLED=false` para desativar essa sincronização.
 
 ```bash
 export FIREBASE_PROJECT_ID=meu-projeto
