@@ -2,6 +2,7 @@ package com.codequest.api.seed;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -25,6 +26,14 @@ class CurriculumDataTest {
                 for (var pergunta : licao.perguntas()) {
                     assertEquals(4, pergunta.opcoes().size(), pergunta.enunciado());
                     assertEquals(1, pergunta.opcoes().stream().filter(DataSeeder.OpcaoSeed::correta).count(),
+                            pergunta.enunciado());
+                    var seeded = DataSeeder.toMap(pergunta, licao.id(), 1);
+                    assertTrue(((String) seeded.get("dica1")).length() > 0, pergunta.enunciado());
+                    assertNotEquals(seeded.get("dica1"), seeded.get("dica2"),
+                            pergunta.enunciado());
+                    assertTrue(((String) seeded.get("explicacao")).contains(
+                                    pergunta.opcoes().stream().filter(DataSeeder.OpcaoSeed::correta)
+                                            .findFirst().orElseThrow().texto()),
                             pergunta.enunciado());
                 }
             }

@@ -256,12 +256,26 @@ public class DataSeeder implements ApplicationRunner {
         );
     }
 
-    private static Map<String, Object> toMap(PerguntaSeed pergunta, String skillId, int dificuldade) {
+    static Map<String, Object> toMap(PerguntaSeed pergunta, String skillId, int dificuldade) {
+        OpcaoSeed correta = pergunta.opcoes().stream()
+                .filter(OpcaoSeed::correta)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Pergunta sem alternativa correta: " + pergunta.id()));
+        List<String> distratores = pergunta.opcoes().stream()
+                .filter(opcao -> !opcao.correta())
+                .map(OpcaoSeed::texto)
+                .toList();
         return Map.of(
                 "id", pergunta.id(),
                 "enunciado", pergunta.enunciado(),
                 "skillId", skillId,
                 "dificuldade", dificuldade,
+                "dica1", "Relembre o conceito pedido e descarte a alternativa que trata de \""
+                        + distratores.get(0) + "\".",
+                "dica2", "Agora compare cada opção com o papel descrito no enunciado; \""
+                        + distratores.get(1) + "\" pertence a outro conceito.",
+                "explicacao", "A resposta correta é \"" + correta.texto()
+                        + "\". Ela corresponde ao conceito solicitado: " + pergunta.enunciado(),
                 "opcoes", pergunta.opcoes().stream()
                         .map(opcao -> Map.of(
                                 "id", opcao.id(),

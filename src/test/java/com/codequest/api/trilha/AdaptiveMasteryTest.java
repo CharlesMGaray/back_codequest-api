@@ -20,6 +20,14 @@ class AdaptiveMasteryTest {
     }
 
     @Test
+    void consideraTentativasNaEvidenciaDeDominio() {
+        assertEquals(65, AdaptiveMastery.update(50, true, 1));
+        assertEquals(59, AdaptiveMastery.update(50, true, 2));
+        assertEquals(53, AdaptiveMastery.update(50, true, 3));
+        assertEquals(35, AdaptiveMastery.update(50, false, 3));
+    }
+
+    @Test
     void classificaDominioEDefineRevisaoEspacada() {
         assertEquals("REVISAR", AdaptiveMastery.level(59));
         assertEquals("EM_DESENVOLVIMENTO", AdaptiveMastery.level(60));

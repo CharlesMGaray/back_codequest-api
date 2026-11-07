@@ -56,13 +56,16 @@ public class TrilhaService {
         var trilhasFuture = db.collection(TRILHAS).get();
         var licoesFuture = db.collection(LICOES).get();
         var concluidasFuture = concluidas(uid).get();
+        var questionStatesFuture = questoesRespondidas(uid).get();
 
         Set<String> concluidas = await(concluidasFuture).getDocuments().stream()
                 .map(DocumentSnapshot::getId)
                 .collect(Collectors.toSet());
+        Map<String, DocumentSnapshot> questionStates = await(questionStatesFuture).getDocuments().stream()
+                .collect(Collectors.toMap(DocumentSnapshot::getId, doc -> doc));
 
         Map<String, List<LicaoResponse>> licoesPorTrilha = await(licoesFuture).getDocuments().stream()
-                .map(doc -> toLicao(doc, concluidas.contains(doc.getId())))
+                .map(doc -> toLicao(doc, concluidas.contains(doc.getId()), questionStates))
                 .sorted(Comparator.comparingInt(LicaoResponse::ordem))
                 .collect(Collectors.groupingBy(LicaoResponse::trilhaId));
 
@@ -98,17 +101,21 @@ public class TrilhaService {
 
     @SuppressWarnings("unchecked")
     public RespostaResponse registrarResposta(String uid, String licaoId, RespostaRequest request) {
-        if (request == null || request.questionId() == null || request.optionId() == null) {
+        if (request == null || request.questionId() == null || request.optionId() == null
+                || request.tentativa() < 1 || request.tentativa() > 3) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Selecione uma alternativa para responder.");
         }
 
         DocumentReference licaoRef = db.collection(LICOES).document(licaoId);
         DocumentReference usuarioRef = db.collection(UsuarioRepository.COLECAO).document(uid);
         DocumentReference tentativaRef = tentativas(uid).document();
+        String questionStateId = licaoId + "_" + request.questionId();
+        DocumentReference questionStateRef = questoesRespondidas(uid).document(questionStateId);
 
         return await(db.runTransaction(tx -> {
             DocumentSnapshot licao = tx.get(licaoRef).get();
             DocumentSnapshot usuario = tx.get(usuarioRef).get();
+            DocumentSnapshot questionState = tx.get(questionStateRef).get();
             if (!licao.exists()) {
                 throw new ApiException(HttpStatus.NOT_FOUND, "Licao nao encontrada.");
             }
@@ -140,10 +147,21 @@ public class TrilhaService {
 
             boolean correta = Boolean.TRUE.equals(opcao.get("correta"));
             int dominioAtual = habilidadeAtual.exists() ? intOf(habilidadeAtual.getLong("dominio")) : 50;
-            int dominio = AdaptiveMastery.update(dominioAtual, correta);
-            long tentativas = (habilidadeAtual.exists() ? longOf(habilidadeAtual.getLong("tentativas")) : 0) + 1;
+            int tentativaAnterior = questionState.exists() ? intOf(questionState.getLong("tentativa")) : 0;
+            boolean resolvidaAntes = questionState.exists() && Boolean.TRUE.equals(questionState.getBoolean("resolvida"));
+            if (resolvidaAntes || request.tentativa() != tentativaAnterior + 1) {
+                throw new ApiException(HttpStatus.CONFLICT, "Atualize a pergunta antes de tentar novamente.");
+            }
+
+            int tentativaAtual = request.tentativa();
+            boolean resolvida = correta || tentativaAtual == 3;
+            int dominio = resolvida
+                    ? AdaptiveMastery.update(dominioAtual, correta, tentativaAtual)
+                    : dominioAtual;
+            long tentativas = (habilidadeAtual.exists() ? longOf(habilidadeAtual.getLong("tentativas")) : 0)
+                    + (resolvida ? tentativaAtual : 0);
             long acertos = (habilidadeAtual.exists() ? longOf(habilidadeAtual.getLong("acertos")) : 0)
-                    + (correta ? 1 : 0);
+                    + (correta && resolvida ? 1 : 0);
             int diasAteRevisao = AdaptiveMastery.reviewIntervalDays(dominio);
             Instant agora = Instant.now();
             Date proximaRevisao = Date.from(agora.plus(diasAteRevisao, ChronoUnit.DAYS));
@@ -157,19 +175,30 @@ public class TrilhaService {
                     "licaoId", licaoId,
                     "skillId", skillId,
                     "correta", correta,
+                    "tentativa", tentativaAtual,
+                    "resolvida", resolvida,
                     "dificuldade", dificuldade,
                     "respondidaEm", FieldValue.serverTimestamp()));
-            tx.set(habilidadeRef, Map.of(
+            tx.set(questionStateRef, Map.of(
                     "skillId", skillId,
-                    "licaoId", licaoId,
-                    "trilhaId", trilhaId,
-                    "nome", nomeHabilidade,
-                    "dominio", dominio,
-                    "nivelDominio", AdaptiveMastery.level(dominio),
-                    "tentativas", tentativas,
-                    "acertos", acertos,
-                    "ultimaRespostaEm", FieldValue.serverTimestamp(),
-                    "proximaRevisao", proximaRevisao));
+                    "tentativa", tentativaAtual,
+                    "resolvida", resolvida,
+                    "correta", correta,
+                    "opcaoId", request.optionId(),
+                    "atualizadaEm", FieldValue.serverTimestamp()));
+            if (resolvida) {
+                tx.set(habilidadeRef, Map.of(
+                        "skillId", skillId,
+                        "licaoId", licaoId,
+                        "trilhaId", trilhaId,
+                        "nome", nomeHabilidade,
+                        "dominio", dominio,
+                        "nivelDominio", AdaptiveMastery.level(dominio),
+                        "tentativas", tentativas,
+                        "acertos", acertos,
+                        "ultimaRespostaEm", FieldValue.serverTimestamp(),
+                        "proximaRevisao", proximaRevisao));
+            }
 
             return new RespostaResponse(
                     request.questionId(),
@@ -181,6 +210,17 @@ public class TrilhaService {
                     dominio,
                     AdaptiveMastery.level(dominio),
                     Math.toIntExact(tentativas),
+                    tentativaAtual,
+                    resolvida,
+                    resolvida ? null : stringOf(pergunta.get(tentativaAtual == 1 ? "dica1" : "dica2")),
+                    resolvida && !correta ? stringOf(pergunta.get("explicacao")) : null,
+                    resolvida && !correta ? String.valueOf(
+                            opcoes.stream()
+                                    .filter(item -> Boolean.TRUE.equals(item.get("correta")))
+                                    .map(item -> item.get("id"))
+                                    .findFirst()
+                                    .orElse(""))
+                            : null,
                     diasAteRevisao,
                     proximaRevisaoIso);
         }));
@@ -214,19 +254,13 @@ public class TrilhaService {
 
             List<Map<String, Object>> perguntas = (List<Map<String, Object>>) licao.get("perguntas");
             if (perguntas != null && !perguntas.isEmpty()) {
-                if (request == null || request.respostas() == null
-                        || request.respostas().size() != perguntas.size()) {
-                    throw new ApiException(HttpStatus.BAD_REQUEST, "Responda corretamente a todas as perguntas.");
-                }
-
                 for (var p : perguntas) {
                     String pId = String.valueOf(p.get("id"));
-                    String selectedOpId = request.respostas().get(pId);
-                    List<Map<String, Object>> opcoes = (List<Map<String, Object>>) p.get("opcoes");
-                    boolean acertou = opcoes != null && opcoes.stream().anyMatch(o ->
-                            String.valueOf(o.get("id")).equals(selectedOpId) && Boolean.TRUE.equals(o.get("correta")));
-                    if (!acertou) {
-                        throw new ApiException(HttpStatus.BAD_REQUEST, "Uma ou mais respostas estao incorretas.");
+                    DocumentSnapshot resposta = tx.get(
+                            questoesRespondidas(uid).document(licaoId + "_" + pId)).get();
+                    if (!resposta.exists() || !Boolean.TRUE.equals(resposta.getBoolean("resolvida"))) {
+                        throw new ApiException(HttpStatus.BAD_REQUEST,
+                                "Responda cada pergunta antes de concluir a licao.");
                     }
                 }
             }
@@ -258,20 +292,44 @@ public class TrilhaService {
         return db.collection(UsuarioRepository.COLECAO).document(uid).collection(TENTATIVAS);
     }
 
+    private com.google.cloud.firestore.CollectionReference questoesRespondidas(String uid) {
+        return db.collection(UsuarioRepository.COLECAO).document(uid).collection("questoesRespondidas");
+    }
+
     @SuppressWarnings("unchecked")
-    private static LicaoResponse toLicao(DocumentSnapshot doc, boolean concluida) {
+    private static LicaoResponse toLicao(
+            DocumentSnapshot doc,
+            boolean concluida,
+            Map<String, DocumentSnapshot> questionStates) {
         List<Map<String, Object>> perguntas = (List<Map<String, Object>>) doc.get("perguntas");
         List<PerguntaResponse> perguntasDto = perguntas == null ? List.of() : perguntas.stream()
                 .map(p -> {
                     List<Map<String, Object>> opcoes = (List<Map<String, Object>>) p.get("opcoes");
                     List<OpcaoResponse> opcoesDto = opcoes == null ? List.of() : opcoes.stream()
-                            .map(o -> new OpcaoResponse(String.valueOf(o.get("id")), (String) o.get("texto")))
+                            .map(o -> new OpcaoResponse(
+                                    String.valueOf(o.get("id")),
+                                    (String) o.get("texto"),
+                                    concluida ? Boolean.TRUE.equals(o.get("correta")) : null))
                             .toList();
                     return new PerguntaResponse(
                             String.valueOf(p.get("id")),
                             (String) p.get("enunciado"),
                             String.valueOf(p.getOrDefault("skillId", doc.getId())),
                             intOfNumber(p.get("dificuldade")),
+                            questionStates.containsKey(doc.getId() + "_" + p.get("id"))
+                                    ? intOf(questionStates.get(doc.getId() + "_" + p.get("id")).getLong("tentativa"))
+                                    : 0,
+                            questionStates.containsKey(doc.getId() + "_" + p.get("id"))
+                                    && Boolean.TRUE.equals(questionStates.get(doc.getId() + "_" + p.get("id")).getBoolean("resolvida")),
+                            questionStates.containsKey(doc.getId() + "_" + p.get("id"))
+                                    ? questionStates.get(doc.getId() + "_" + p.get("id")).getBoolean("correta")
+                                    : null,
+                            questionStates.containsKey(doc.getId() + "_" + p.get("id"))
+                                    ? questionStates.get(doc.getId() + "_" + p.get("id")).getString("opcaoId")
+                                    : null,
+                            questionHint(p, questionStates.get(doc.getId() + "_" + p.get("id"))),
+                            questionExplanation(p, questionStates.get(doc.getId() + "_" + p.get("id"))),
+                            correctOptionId(p, questionStates.get(doc.getId() + "_" + p.get("id"))),
                             opcoesDto);
                 })
                 .toList();
@@ -297,5 +355,40 @@ public class TrilhaService {
 
     private static int intOfNumber(Object value) {
         return value instanceof Number number ? number.intValue() : 1;
+    }
+
+    private static String stringOf(Object value) {
+        return value instanceof String text ? text : "";
+    }
+
+    private static String questionHint(Map<String, Object> question, DocumentSnapshot state) {
+        if (state == null || Boolean.TRUE.equals(state.getBoolean("resolvida"))) {
+            return null;
+        }
+        int attempt = intOf(state.getLong("tentativa"));
+        return stringOf(question.get(attempt == 1 ? "dica1" : "dica2"));
+    }
+
+    private static String questionExplanation(Map<String, Object> question, DocumentSnapshot state) {
+        return state != null
+                && Boolean.TRUE.equals(state.getBoolean("resolvida"))
+                && !Boolean.TRUE.equals(state.getBoolean("correta"))
+                ? stringOf(question.get("explicacao"))
+                : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String correctOptionId(Map<String, Object> question, DocumentSnapshot state) {
+        if (state == null
+                || !Boolean.TRUE.equals(state.getBoolean("resolvida"))
+                || Boolean.TRUE.equals(state.getBoolean("correta"))) {
+            return null;
+        }
+        List<Map<String, Object>> opcoes = (List<Map<String, Object>>) question.get("opcoes");
+        return opcoes == null ? null : opcoes.stream()
+                .filter(opcao -> Boolean.TRUE.equals(opcao.get("correta")))
+                .map(opcao -> String.valueOf(opcao.get("id")))
+                .findFirst()
+                .orElse(null);
     }
 }

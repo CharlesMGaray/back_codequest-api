@@ -9,6 +9,11 @@ final class AdaptiveMastery {
         return (int) Math.round(current * 0.7 + (correct ? 100 : 0) * 0.3);
     }
 
+    static int update(int current, boolean correct, int attempt) {
+        int evidence = correct ? Math.max(60, 100 - (attempt - 1) * 20) : 0;
+        return (int) Math.round(current * 0.7 + evidence * 0.3);
+    }
+
     static String level(int score) {
         if (score < 60) {
             return "REVISAR";

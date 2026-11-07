@@ -51,13 +51,15 @@ mvn spring-boot:run
 | POST | `/api/auth/login` | – | `{email, senha}` → token + usuário |
 | POST | `/api/auth/refresh` | – | `{refreshToken}` → novo token (o token do Firebase expira em 1h) |
 | GET | `/api/progresso` | ****** Domínio, tentativas e próxima revisão por habilidade |
-| POST | `/api/licoes/{id}/responder` | ****** Valida uma alternativa e registra tentativa/domínio |
+| POST | `/api/licoes/{id}/responder` | ****** Valida uma alternativa, aplica até três tentativas e atualiza o domínio |
 | GET | `/api/auth/me` | Bearer | Perfil do usuário logado |
 | GET | `/api/trilhas` | Bearer | Trilhas com lições, perguntas e flag `concluida` |
 | POST | `/api/licoes/{id}/concluir` | Bearer | Soma o XP uma única vez (transação) |
 | GET | `/api/ranking?limite=10` | Bearer | Top usuários por XP |
 
 Erros sempre retornam `{"message": "..."}`.
+O endpoint de resposta recebe `{questionId, optionId, tentativa}`; envie tentativa
+`1`, `2` ou `3` em sequência para cada questão.
 
 ## Estrutura no Firestore
 
@@ -72,14 +74,18 @@ usuarios/{uid}/habilidades/{skillId}       dominio, nivelDominio, tentativas, ac
                                            ultimaRespostaEm, proximaRevisao
 usuarios/{uid}/tentativas/{tentativaId}    questionId, licaoId, skillId, correta,
                                            dificuldade, respondidaEm
+usuarios/{uid}/questoesRespondidas/{id}    tentativa, resolvida, correta, opcaoId
 ```
 
 Nível = `xpTotal / 100 + 1`. O domínio começa em 50 e é atualizado por média móvel
 exponencial após cada resposta. A API recomenda revisar em 1 dia para domínio abaixo
-de 60, em 3 dias abaixo de 80 e em 7 dias para domínio igual ou superior a 80. As
-questões são enviadas sem o gabarito; a correção é feita exclusivamente no backend.
+de 60, em 3 dias abaixo de 80 e em 7 dias para domínio igual ou superior a 80. O
+domínio considera acerto na primeira, segunda ou terceira tentativa, ou esgotamento
+das tentativas. As questões são enviadas sem o gabarito; a correção é feita no backend.
 O quiz prioriza questões mais acessíveis para habilidades que precisam de revisão e
-desafios mais difíceis para habilidades dominadas. Só a API acessa o Firestore (via
+desafios mais difíceis para habilidades dominadas. Respostas erradas exibem duas dicas
+progressivas; após o terceiro erro, a API revela a resposta e a explicação. Só a API
+acessa o Firestore (via
 Admin SDK), então as regras de segurança do Firestore podem bloquear todo acesso direto:
 
 ```
