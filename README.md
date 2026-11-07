@@ -50,6 +50,8 @@ mvn spring-boot:run
 | POST | `/api/auth/registrar` | – | `{nome, email, senha, perfil}` → token + usuário |
 | POST | `/api/auth/login` | – | `{email, senha}` → token + usuário |
 | POST | `/api/auth/refresh` | – | `{refreshToken}` → novo token (o token do Firebase expira em 1h) |
+| GET | `/api/progresso` | ****** Domínio, tentativas e próxima revisão por habilidade |
+| POST | `/api/licoes/{id}/responder` | ****** Valida uma alternativa e registra tentativa/domínio |
 | GET | `/api/auth/me` | Bearer | Perfil do usuário logado |
 | GET | `/api/trilhas` | Bearer | Trilhas com lições, perguntas e flag `concluida` |
 | POST | `/api/licoes/{id}/concluir` | Bearer | Soma o XP uma única vez (transação) |
@@ -64,11 +66,21 @@ usuarios/{uid}                             nome, email, perfil, xpTotal, nivelAt
 usuarios/{uid}/licoesConcluidas/{licaoId}  trilhaId, xpGanho, concluidaEm
 trilhas/{trilhaId}                         titulo, descricao, ordem
 licoes/{licaoId}                           trilhaId, ordem, titulo, resumo, xpBonus,
-                                           perguntas[{id, enunciado, opcoes[{id, texto, correta}]}]
+                                           perguntas[{id, enunciado, skillId, dificuldade,
+                                                      opcoes[{id, texto, correta}]}]
+usuarios/{uid}/habilidades/{skillId}       dominio, nivelDominio, tentativas, acertos,
+                                           ultimaRespostaEm, proximaRevisao
+usuarios/{uid}/tentativas/{tentativaId}    questionId, licaoId, skillId, correta,
+                                           dificuldade, respondidaEm
 ```
 
-Nível = `xpTotal / 100 + 1`. Só a API acessa o Firestore (via Admin SDK), então as regras
-de segurança do Firestore podem bloquear todo acesso direto de clientes:
+Nível = `xpTotal / 100 + 1`. O domínio começa em 50 e é atualizado por média móvel
+exponencial após cada resposta. A API recomenda revisar em 1 dia para domínio abaixo
+de 60, em 3 dias abaixo de 80 e em 7 dias para domínio igual ou superior a 80. As
+questões são enviadas sem o gabarito; a correção é feita exclusivamente no backend.
+O quiz prioriza questões mais acessíveis para habilidades que precisam de revisão e
+desafios mais difíceis para habilidades dominadas. Só a API acessa o Firestore (via
+Admin SDK), então as regras de segurança do Firestore podem bloquear todo acesso direto:
 
 ```
 rules_version = '2';

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -18,6 +19,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -77,6 +79,14 @@ class CodequestApiApplicationTests {
         mvc.perform(get("/api/trilhas").header(HttpHeaders.ORIGIN, "http://localhost:5173"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:5173"));
+
+        mvc.perform(get("/api/progresso"))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(post("/api/licoes/logica-1/responder")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"questionId\":\"p1\",\"optionId\":\"a\"}"))
+                .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(firebaseAuth, firestore);
     }

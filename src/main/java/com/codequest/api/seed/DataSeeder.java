@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 import static com.codequest.api.common.Futures.await;
 
@@ -47,7 +48,9 @@ public class DataSeeder implements ApplicationRunner {
                         "titulo", licao.titulo(),
                         "resumo", licao.resumo(),
                         "xpBonus", licao.xpBonus(),
-                        "perguntas", licao.perguntas().stream().map(DataSeeder::toMap).toList()),
+                        "perguntas", IntStream.range(0, licao.perguntas().size())
+                                .mapToObj(index -> toMap(licao.perguntas().get(index), licao.id(), index + 1))
+                                .toList()),
                         SetOptions.merge());
             }
         }
@@ -253,10 +256,12 @@ public class DataSeeder implements ApplicationRunner {
         );
     }
 
-    private static Map<String, Object> toMap(PerguntaSeed pergunta) {
+    private static Map<String, Object> toMap(PerguntaSeed pergunta, String skillId, int dificuldade) {
         return Map.of(
                 "id", pergunta.id(),
                 "enunciado", pergunta.enunciado(),
+                "skillId", skillId,
+                "dificuldade", dificuldade,
                 "opcoes", pergunta.opcoes().stream()
                         .map(opcao -> Map.of(
                                 "id", opcao.id(),
