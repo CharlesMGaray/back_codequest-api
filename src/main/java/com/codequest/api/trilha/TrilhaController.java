@@ -48,7 +48,7 @@ public class TrilhaController {
     public ConclusaoResponse concluir(
             @AuthenticationPrincipal String uid,
             @PathVariable String licaoId,
-            @RequestBody(required = false) ConclusaoRequest body) {
+            @RequestBody ConclusaoRequest body) {
         return trilhaService.concluirLicao(uid, licaoId, body);
     }
 }

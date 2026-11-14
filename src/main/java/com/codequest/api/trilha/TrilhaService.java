@@ -20,10 +20,12 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -45,6 +47,7 @@ public class TrilhaService {
     public static final String CONCLUIDAS = "licoesConcluidas";
     public static final String HABILIDADES = "habilidades";
     public static final String TENTATIVAS = "tentativas";
+    public static final int QUESTIONS_PER_LESSON = 5;
 
     private final Firestore db;
 
@@ -227,10 +230,6 @@ public class TrilhaService {
     }
 
     /** Conclui a licao uma unica vez por usuario, somando o XP de forma atomica. */
-    public ConclusaoResponse concluirLicao(String uid, String licaoId) {
-        return concluirLicao(uid, licaoId, null);
-    }
-
     @SuppressWarnings("unchecked")
     public ConclusaoResponse concluirLicao(String uid, String licaoId, TrilhaDtos.ConclusaoRequest request) {
         DocumentReference licaoRef = db.collection(LICOES).document(licaoId);
@@ -253,19 +252,41 @@ public class TrilhaService {
             }
 
             List<Map<String, Object>> perguntas = (List<Map<String, Object>>) licao.get("perguntas");
-            if (perguntas != null && !perguntas.isEmpty()) {
-                for (var p : perguntas) {
-                    String pId = String.valueOf(p.get("id"));
-                    DocumentSnapshot resposta = tx.get(
-                            questoesRespondidas(uid).document(licaoId + "_" + pId)).get();
-                    if (!resposta.exists() || !Boolean.TRUE.equals(resposta.getBoolean("resolvida"))) {
-                        throw new ApiException(HttpStatus.BAD_REQUEST,
-                                "Responda cada pergunta antes de concluir a licao.");
-                    }
-                }
+            Map<String, String> respostas = request == null || request.respostas() == null
+                    ? Map.of()
+                    : request.respostas();
+            if (respostas.size() != QUESTIONS_PER_LESSON) {
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "Responda as cinco questoes da licao antes de concluir.");
             }
 
-            int xpGanho = intOf(licao.getLong("xpBonus"));
+            Map<String, Map<String, Object>> perguntasPorId = perguntas == null
+                    ? Map.of()
+                    : perguntas.stream().collect(Collectors.toMap(
+                            pergunta -> String.valueOf(pergunta.get("id")),
+                            pergunta -> pergunta));
+            List<Boolean> respostasCorretas = new ArrayList<>(QUESTIONS_PER_LESSON);
+            List<Integer> tentativasSelecionadas = new ArrayList<>(QUESTIONS_PER_LESSON);
+            for (var respostaSelecionada : respostas.entrySet()) {
+                if (!perguntasPorId.containsKey(respostaSelecionada.getKey())) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST,
+                            "A selecao contem uma questao que nao pertence a esta licao.");
+                }
+
+                DocumentSnapshot resposta = tx.get(
+                        questoesRespondidas(uid).document(licaoId + "_" + respostaSelecionada.getKey())).get();
+                if (!resposta.exists()
+                        || !Boolean.TRUE.equals(resposta.getBoolean("resolvida"))
+                        || !Objects.equals(respostaSelecionada.getValue(), resposta.getString("opcaoId"))) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST,
+                            "Responda as cinco questoes selecionadas antes de concluir.");
+                }
+                respostasCorretas.add(Boolean.TRUE.equals(resposta.getBoolean("correta")));
+                tentativasSelecionadas.add(intOf(resposta.getLong("tentativa")));
+            }
+
+            int xpBonus = intOf(licao.getLong("xpBonus"));
+            int xpGanho = calculateXp(xpBonus, respostasCorretas, tentativasSelecionadas);
             Long xpAtual = usuario.getLong("xpTotal");
             long xpTotal = (xpAtual == null ? 0 : xpAtual) + xpGanho;
             int nivel = Usuario.nivelPara(xpTotal);
@@ -278,6 +299,28 @@ public class TrilhaService {
 
             return new ConclusaoResponse(licaoId, xpGanho, xpTotal, nivel);
         }));
+    }
+
+    static int calculateXp(int xpBonus, List<Boolean> respostasCorretas, List<Integer> tentativas) {
+        if (respostasCorretas.size() != QUESTIONS_PER_LESSON || tentativas.size() != QUESTIONS_PER_LESSON) {
+            throw new IllegalArgumentException("A conclusao exige cinco respostas.");
+        }
+
+        double xpGanho = 0;
+        for (int index = 0; index < QUESTIONS_PER_LESSON; index++) {
+            if (!respostasCorretas.get(index)) {
+                continue;
+            }
+
+            double multiplicador = switch (tentativas.get(index)) {
+                case 1 -> 1.0;
+                case 2 -> 0.6;
+                case 3 -> 0.3;
+                default -> 0.0;
+            };
+            xpGanho += xpBonus * multiplicador / QUESTIONS_PER_LESSON;
+        }
+        return (int) Math.round(xpGanho);
     }
 
     private com.google.cloud.firestore.CollectionReference concluidas(String uid) {

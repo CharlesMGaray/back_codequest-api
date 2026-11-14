@@ -2,6 +2,8 @@ package com.codequest.api.trilha;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class AdaptiveMasteryTest {
@@ -36,5 +38,21 @@ class AdaptiveMasteryTest {
         assertEquals(1, AdaptiveMastery.reviewIntervalDays(59));
         assertEquals(3, AdaptiveMastery.reviewIntervalDays(60));
         assertEquals(7, AdaptiveMastery.reviewIntervalDays(80));
+    }
+
+    @Test
+    void calculaXpDaLicaoPelaTentativaDasCincoQuestoes() {
+        assertEquals(60, TrilhaService.calculateXp(60,
+                List.of(true, true, true, true, true),
+                List.of(1, 1, 1, 1, 1)));
+        assertEquals(36, TrilhaService.calculateXp(60,
+                List.of(true, true, true, true, true),
+                List.of(2, 2, 2, 2, 2)));
+        assertEquals(18, TrilhaService.calculateXp(60,
+                List.of(true, true, true, true, true),
+                List.of(3, 3, 3, 3, 3)));
+        assertEquals(0, TrilhaService.calculateXp(60,
+                List.of(false, false, false, false, false),
+                List.of(3, 3, 3, 3, 3)));
     }
 }

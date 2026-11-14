@@ -21,10 +21,12 @@ Variáveis de ambiente:
 | `FIREBASE_WEB_API_KEY` | Chave de API da Web (usada no login por e-mail/senha) |
 | `CODEQUEST_SEED_ENABLED` | `true` (padrão) sincroniza o currículo inicial de trilhas e lições ao iniciar a API |
 
-O currículo inicial contém seis trilhas, cada uma com 10 a 15 questões de múltipla
-escolha. As trilhas e lições mantidas pelo seed são atualizadas ao iniciar a API,
-inclusive quando já existem dados no Firestore; o progresso dos usuários fica
-preservado. Defina `CODEQUEST_SEED_ENABLED=false` para desativar essa sincronização.
+O currículo inicial contém seis trilhas, com seis questões por lição: cinco são
+selecionadas para cada quiz e uma fica como questão extra. Cada banco inclui
+questões fáceis, médias e difíceis. As trilhas e lições mantidas pelo seed são
+atualizadas ao iniciar a API, inclusive quando já existem dados no Firestore; o
+progresso dos usuários fica preservado. Defina `CODEQUEST_SEED_ENABLED=false` para
+desativar essa sincronização.
 
 ```bash
 export FIREBASE_PROJECT_ID=meu-projeto
@@ -54,12 +56,13 @@ mvn spring-boot:run
 | POST | `/api/licoes/{id}/responder` | ****** Valida uma alternativa, aplica até três tentativas e atualiza o domínio |
 | GET | `/api/auth/me` | Bearer | Perfil do usuário logado |
 | GET | `/api/trilhas` | Bearer | Trilhas com lições, perguntas e flag `concluida` |
-| POST | `/api/licoes/{id}/concluir` | Bearer | Soma o XP uma única vez (transação) |
+| POST | `/api/licoes/{id}/concluir` | Bearer | Valida as cinco respostas selecionadas e soma o XP uma única vez (transação) |
 | GET | `/api/ranking?limite=10` | Bearer | Top usuários por XP |
 
 Erros sempre retornam `{"message": "..."}`.
 O endpoint de resposta recebe `{questionId, optionId, tentativa}`; envie tentativa
-`1`, `2` ou `3` em sequência para cada questão.
+`1`, `2` ou `3` em sequência para cada questão. A conclusão recebe
+`{respostas: {"questionId": "optionId", ...}}` com as cinco questões do quiz.
 
 ## Estrutura no Firestore
 
@@ -78,12 +81,14 @@ usuarios/{uid}/questoesRespondidas/{id}    tentativa, resolvida, correta, opcaoI
 ```
 
 Nível = `xpTotal / 100 + 1`. O domínio começa em 50 e é atualizado por média móvel
-exponencial após cada resposta. A API recomenda revisar em 1 dia para domínio abaixo
-de 60, em 3 dias abaixo de 80 e em 7 dias para domínio igual ou superior a 80. O
-domínio considera acerto na primeira, segunda ou terceira tentativa, ou esgotamento
-das tentativas. As questões são enviadas sem o gabarito; a correção é feita no backend.
-O quiz prioriza questões mais acessíveis para habilidades que precisam de revisão e
-desafios mais difíceis para habilidades dominadas. Respostas erradas exibem duas dicas
+exponencial após cada resposta. A seleção do quiz usa o domínio médio da trilha:
+abaixo de 60 prioriza questões fáceis, de 60 a 79 prioriza médias e a partir de 80
+prioriza difíceis. Cinco questões são exibidas por lição; a questão extra permanece
+no banco. O XP da lição é dividido entre as cinco respostas: acertos na primeira,
+segunda e terceira tentativa rendem 100%, 60% e 30% da parte da questão; erros rendem
+zero. A API recomenda revisar em 1 dia para domínio abaixo de 60, em 3 dias abaixo
+de 80 e em 7 dias para domínio igual ou superior a 80. As questões são enviadas sem
+o gabarito; a correção é feita no backend. Respostas erradas exibem duas dicas
 progressivas; após o terceiro erro, a API revela a resposta e a explicação. Só a API
 acessa o Firestore (via
 Admin SDK), então as regras de segurança do Firestore podem bloquear todo acesso direto:
