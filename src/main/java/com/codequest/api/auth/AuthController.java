@@ -2,6 +2,8 @@ package com.codequest.api.auth;
 
 import com.codequest.api.auth.AuthDtos.AuthResponse;
 import com.codequest.api.auth.AuthDtos.LoginRequest;
+import com.codequest.api.auth.AuthDtos.MessageResponse;
+import com.codequest.api.auth.AuthDtos.RecuperarSenhaRequest;
 import com.codequest.api.auth.AuthDtos.RefreshRequest;
 import com.codequest.api.auth.AuthDtos.RegistroRequest;
 import com.codequest.api.auth.AuthDtos.TokenResponse;
@@ -40,6 +42,12 @@ public class AuthController {
     @PostMapping("/refresh")
     public TokenResponse refresh(@Valid @RequestBody RefreshRequest req) {
         return authService.refresh(req.refreshToken());
+    }
+
+    @PostMapping("/recuperar-senha")
+    public MessageResponse recuperarSenha(@Valid @RequestBody RecuperarSenhaRequest req) {
+        authService.recuperarSenha(req.email());
+        return new MessageResponse("Se existir uma conta com esse email, enviaremos as instrucoes para redefinir a senha.");
     }
 
     @GetMapping("/me")

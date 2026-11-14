@@ -52,6 +52,7 @@ mvn spring-boot:run
 | POST | `/api/auth/registrar` | – | `{nome, email, senha, perfil}` → token + usuário |
 | POST | `/api/auth/login` | – | `{email, senha}` → token + usuário |
 | POST | `/api/auth/refresh` | – | `{refreshToken}` → novo token (o token do Firebase expira em 1h) |
+| POST | `/api/auth/recuperar-senha` | – | `{email}` → solicita e-mail de redefinição de senha pelo Firebase |
 | GET | `/api/progresso` | ****** Domínio, tentativas e próxima revisão por habilidade |
 | POST | `/api/licoes/{id}/responder` | ****** Valida uma alternativa, aplica até três tentativas e atualiza o domínio |
 | GET | `/api/auth/me` | Bearer | Perfil do usuário logado |

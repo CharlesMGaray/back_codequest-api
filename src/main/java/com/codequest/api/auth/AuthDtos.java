@@ -28,6 +28,13 @@ public final class AuthDtos {
     public record RefreshRequest(@NotBlank(message = "Informe o refreshToken.") String refreshToken) {
     }
 
+    public record RecuperarSenhaRequest(
+            @NotBlank(message = "Informe o email.") @Email(message = "Email invalido.") String email) {
+    }
+
+    public record MessageResponse(String message) {
+    }
+
     /** Resposta de login/registro: o front guarda o objeto inteiro como "usuario". */
     public record AuthResponse(
             String token, String refreshToken,

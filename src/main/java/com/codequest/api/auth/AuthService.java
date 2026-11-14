@@ -83,6 +83,10 @@ public class AuthService {
         return new TokenResponse(tokens.idToken(), tokens.refreshToken());
     }
 
+    public void recuperarSenha(String email) {
+        authRest.sendPasswordResetEmail(email.trim().toLowerCase(Locale.ROOT));
+    }
+
     public Usuario me(String uid) {
         return usuarios.buscar(uid)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Usuario nao encontrado."));

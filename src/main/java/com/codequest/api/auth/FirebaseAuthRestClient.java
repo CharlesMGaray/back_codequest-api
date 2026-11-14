@@ -94,6 +94,25 @@ public class FirebaseAuthRestClient {
         }
     }
 
+    public void sendPasswordResetEmail(String email) {
+        requireApiKey();
+        try {
+            identityToolkit.post()
+                    .uri(u -> u.path("/accounts:sendOobCode").queryParam("key", apiKey).build())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("requestType", "PASSWORD_RESET", "email", email))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientResponseException e) {
+            // Mantem resposta generica para nao revelar se o email esta cadastrado.
+            if (e.getResponseBodyAsString().contains("EMAIL_NOT_FOUND")) {
+                return;
+            }
+            throw new IllegalStateException("Falha ao solicitar redefinicao de senha no Firebase: "
+                    + e.getResponseBodyAsString(), e);
+        }
+    }
+
     private void requireApiKey() {
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException("Defina FIREBASE_WEB_API_KEY (firebase.web-api-key).");
