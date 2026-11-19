@@ -53,7 +53,8 @@ public class AuthService {
 
         Usuario usuario;
         try {
-            usuario = usuarios.criar(user.getUid(), nome, email, req.perfil());
+            // O perfil enviado pelo cliente e ignorado: toda conta nova e ALUNO.
+            usuario = usuarios.criar(user.getUid(), nome, email, Perfil.ALUNO);
         } catch (RuntimeException e) {
             // Desfaz a conta no Auth para nao deixar usuario sem perfil.
             try {

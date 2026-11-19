@@ -126,6 +126,8 @@ public class TrilhaService {
                 throw new ApiException(HttpStatus.NOT_FOUND, "Usuario nao encontrado.");
             }
 
+            exigirLicaoLiberada(tx, uid, licao);
+
             List<Map<String, Object>> perguntas = (List<Map<String, Object>>) licao.get("perguntas");
             Map<String, Object> pergunta = perguntas == null ? null : perguntas.stream()
                     .filter(item -> request.questionId().equals(String.valueOf(item.get("id"))))
@@ -250,6 +252,7 @@ public class TrilhaService {
             if (conclusao.exists()) {
                 throw new ApiException(HttpStatus.CONFLICT, "Licao ja concluida.");
             }
+            exigirLicaoLiberada(tx, uid, licao);
 
             List<Map<String, Object>> perguntas = (List<Map<String, Object>>) licao.get("perguntas");
             Map<String, String> respostas = request == null || request.respostas() == null
@@ -321,6 +324,26 @@ public class TrilhaService {
             xpGanho += xpBonus * multiplicador / QUESTIONS_PER_LESSON;
         }
         return (int) Math.round(xpGanho);
+    }
+
+    /** Exige que as licoes anteriores da mesma trilha ja tenham sido concluidas por este usuario. */
+    private void exigirLicaoLiberada(com.google.cloud.firestore.Transaction tx, String uid, DocumentSnapshot licao)
+            throws Exception {
+        String trilhaId = licao.getString("trilhaId");
+        if (trilhaId == null) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Conclua a licao anterior para liberar esta.");
+        }
+        Map<String, Integer> ordens = new java.util.HashMap<>();
+        for (DocumentSnapshot daTrilha : tx.get(db.collection(LICOES).whereEqualTo("trilhaId", trilhaId))
+                .get().getDocuments()) {
+            ordens.put(daTrilha.getId(), intOf(daTrilha.getLong("ordem")));
+        }
+        Set<String> feitas = tx.get(concluidas(uid)).get().getDocuments().stream()
+                .map(DocumentSnapshot::getId)
+                .collect(Collectors.toSet());
+        if (!LicaoDesbloqueio.liberada(licao.getId(), ordens, feitas)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Conclua a licao anterior para liberar esta.");
+        }
     }
 
     private com.google.cloud.firestore.CollectionReference concluidas(String uid) {

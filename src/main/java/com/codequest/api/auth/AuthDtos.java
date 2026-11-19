@@ -4,7 +4,6 @@ import com.codequest.api.usuario.Perfil;
 import com.codequest.api.usuario.Usuario;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public final class AuthDtos {
@@ -17,12 +16,13 @@ public final class AuthDtos {
             @NotBlank(message = "Informe a senha.") String senha) {
     }
 
+    /** O campo perfil e aceito por compatibilidade, mas ignorado: toda conta nova e ALUNO. */
     public record RegistroRequest(
             @NotBlank(message = "Informe o nome.") @Size(max = 100, message = "Nome muito longo.") String nome,
             @NotBlank(message = "Informe o email.") @Email(message = "Email invalido.") String email,
             @NotBlank(message = "Informe a senha.")
             @Size(min = 6, message = "A senha precisa ter pelo menos 6 caracteres.") String senha,
-            @NotNull(message = "Informe o perfil.") Perfil perfil) {
+            Perfil perfil) {
     }
 
     public record RefreshRequest(@NotBlank(message = "Informe o refreshToken.") String refreshToken) {
